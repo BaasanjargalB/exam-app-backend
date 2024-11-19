@@ -10,7 +10,7 @@ app.use(cors({
   origin: 'http://localhost:4200'
 }));
 // Middlewares
-app.use(bodyParser.text());
+app.use(bodyParser.json());
 
 // Routes
 const routes = require('./app/routes');
