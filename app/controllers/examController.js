@@ -1,16 +1,35 @@
-const { Question, Exam } = require('../models/projectModel');
+const { Question, Exam, User, UserExam } = require('../models/projectModel');
 
 exports.getExam = async (req, res) => {
   try {
-    const { examId } = req.params;
+    const { examId, fireId } = req.params;
 
-    const exam = await Exam.findById(examId);
+    const exam = await Exam.findById(examId).populate({
+      path: 'questions',
+      select: '-correctAnswer'
+    });
+    const user = await User.findOne({ fireId });
+    if (!user) {
+      return res.status(404).json({ error: 'User not found' });
+    }
 
     if (!exam) {
       return res.status(404).json({ error: 'Exam not found' });
     }
+
+    const userAttempt = await UserExam.findOne({ user: user._id, exam: exam._id }).populate({
+      path: 'responses',
+      populate: {
+        path: 'question', // Populate the question for each response
+        model: 'Question', // Replace with the correct model name if necessary
+      },
+    });
     
-    res.json(exam);
+    const data = {
+      exam: exam,
+      userAttempt: userAttempt
+    }
+    res.json(data);
   } catch (error) {
     console.error(error);
     res.status(500).send('Error occurred while fetching exam questions');
@@ -19,16 +38,41 @@ exports.getExam = async (req, res) => {
 
 exports.getExamAll = async (req, res) => {
   try {
+    const { fireId } = req.params;
 
+    // Find the user by fireId
+    const user = await User.findOne({ fireId });
+    if (!user) {
+      return res.status(404).json({ error: 'User not found' });
+    }
+
+    // Find all exams without questions
     const exams = await Exam.find().select('-questions');
-    console.log("orjin");
-    console.log(exams);
 
-    
-    res.json(exams);
+    // Find all user attempts
+    const userAttempts = await UserExam.find({ user: user._id }).select('exam score');
+
+    // Create a map for quick lookup of scores by exam ID
+    const attemptMap = userAttempts.reduce((map, attempt) => {
+      map[attempt.exam.toString()] = attempt.score;
+      return map;
+    }, {});
+
+    // Add score to exams if user attempted
+    const examsWithScores = exams.map((exam) => {
+      const score = attemptMap.hasOwnProperty(exam._id.toString())
+        ? attemptMap[exam._id.toString()]
+        : null; // Null if no attempt
+      return {
+        ...exam.toObject(),
+        score,
+      };
+    });
+
+    res.json(examsWithScores);
   } catch (error) {
     console.error(error);
-    res.status(500).send('Error occurred while fetching exam questions');
+    res.status(500).send('Error occurred while fetching exams');
   }
 };
 
