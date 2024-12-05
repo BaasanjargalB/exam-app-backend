@@ -19,6 +19,8 @@ const userSchema = new mongoose.Schema({
   username: String,
   role: String,
   fireId: String,
+  teacherId: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
+  status: String,
 });
 
 const userExamSchema = new mongoose.Schema({
