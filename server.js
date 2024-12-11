@@ -4,6 +4,13 @@ const cors = require('cors'); // Import the cors package
 const app = express();
 const PORT = process.env.PORT || 3000;
 const db = require('./config/db');
+const admin = require("firebase-admin");
+const serviceAccount = require("./config/serviceAccountKey.json");
+
+admin.initializeApp({
+  credential: admin.credential.cert(serviceAccount)
+});
+
 
 // Enable CORS for requests from localhost:4200
 app.use(cors({

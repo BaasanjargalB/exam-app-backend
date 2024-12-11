@@ -5,7 +5,8 @@ const questionSchema = new mongoose.Schema({
   choices: [String],
   correctAnswer: String,
   category: String,
-  questionPoint: Number
+  questionPoint: Number,
+  answerType: String,
 });
 
 const examSchema = new mongoose.Schema({

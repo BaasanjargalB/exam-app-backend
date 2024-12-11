@@ -24,13 +24,33 @@ exports.saveUserExamAttempt = async (req, res) => {
     const responses = exam.questions.map((question) => {
       const answer = answers.find(ans => ans._id === question._id.toString());
       const selectedAnswer = answer ? answer.selectedAnswer : null;
-      const isCorrect = selectedAnswer === question.correctAnswer;
-      if (isCorrect) score += question.questionPoint || 1;
-      return {
-        question: question._id,
-        selectedAnswer,
-        isCorrect,
-      };
+      if (question.answerType === 'fill') {
+        const selectedAnswerArray = selectedAnswer.split(';');
+
+        const correctAnswerArray = question.correctAnswer.split(';');
+        var isCorrect = true;
+        correctAnswerArray.forEach((answerPart, index) => {
+          const [correctAnswerValue, points] = answerPart.split('&');
+          if (selectedAnswerArray[index].trim() === correctAnswerValue.trim()) {
+            score += parseInt(points) || 0;
+          } else {
+            isCorrect = false;
+          }
+        })
+        return {
+          question: question._id,
+          selectedAnswer,
+          isCorrect,
+        };
+      } else {
+        const isCorrect = selectedAnswer === question.correctAnswer;
+        if (isCorrect) score += question.questionPoint || 1;
+        return {
+          question: question._id,
+          selectedAnswer,
+          isCorrect,
+        };
+      }
     });
 
     // Create and save UserExam
@@ -71,8 +91,10 @@ const categories = [
 
 exports.getStatistic = async (req, res) => {
   try {
-    console.log('statistic orson')
+    console.log('statistic orson');
     const { fireId } = req.params;
+
+    // Find the user by fireId
     const user = await User.findOne({ fireId });
     if (!user) {
       return res.status(404).json({ error: 'User not found' });
@@ -84,21 +106,18 @@ exports.getStatistic = async (req, res) => {
       categoryStats[category] = { total: 0, correct: 0 };
     });
 
-    // Fetch UserExam data and populate question details
-    const userExams = await UserExam.find({ user: user._id })
+    // Fetch all UserExams for the user (for overall statistics)
+    const allUserExams = await UserExam.find({ user: user._id })
       .populate({
         path: 'responses.question',
         select: 'category', // Only populate the category field
       })
       .exec();
 
-    console.log('statistic ene hurtel gaigu')
-    // Aggregate data by category
-    console.log(userExams);
-    userExams.forEach((userExam) => {
-      console.log(userExam);
+    console.log('statistic ene hurtel gaigu');
+    // Aggregate data by category for all exams (overall)
+    allUserExams.forEach((userExam) => {
       userExam.responses.forEach((response) => {
-        console.log(response);
         const category = response.question?.category; // Ensure question exists
         if (category && categoryStats[category]) {
           categoryStats[category].total += 1;
@@ -109,22 +128,62 @@ exports.getStatistic = async (req, res) => {
       });
     });
 
-    console.log('statistic za garwuu')
-
-    // Compute percentages and format results
-    const statistics = Object.entries(categoryStats).map(([category, stats]) => ({
+    // Calculate overall statistics
+    const overallStatistics = Object.entries(categoryStats).map(([category, stats]) => ({
       category,
       totalQuestions: stats.total,
       correctAnswers: stats.correct,
       percentage: stats.total > 0 ? ((stats.correct / stats.total) * 100).toFixed(2) : '0.00',
     }));
 
-    console.log('statistic odoo end')
+    // Reset category stats for the last 3 exams
+    const lastThreeCategoryStats = {};
+    categories.forEach((category) => {
+      lastThreeCategoryStats[category] = { total: 0, correct: 0 };
+    });
 
-    return res.json(statistics);
+    // Fetch the last 3 UserExams for the user
+    const lastThreeExams = await UserExam.find({ user: user._id })
+      .sort({ examDate: -1 }) // Sort by examDate in descending order
+      .limit(3) // Limit to the last 3 exams
+      .populate({
+        path: 'responses.question',
+        select: 'category', // Only populate the category field
+      })
+      .exec();
+
+    console.log('statistic ene hurtel gaigu');
+    // Aggregate data by category for the last 3 exams
+    lastThreeExams.forEach((userExam) => {
+      userExam.responses.forEach((response) => {
+        const category = response.question?.category;
+        if (category && lastThreeCategoryStats[category]) {
+          lastThreeCategoryStats[category].total += 1;
+          if (response.isCorrect) {
+            lastThreeCategoryStats[category].correct += 1;
+          }
+        }
+      });
+    });
+
+    // Calculate statistics for the last 3 exams
+    const lastThreeStatistics = Object.entries(lastThreeCategoryStats).map(([category, stats]) => ({
+      category,
+      totalQuestions: stats.total,
+      correctAnswers: stats.correct,
+      percentage: stats.total > 0 ? ((stats.correct / stats.total) * 100).toFixed(2) : '0.00',
+    }));
+
+    console.log('statistic odoo end');
+
+    return res.json({
+      overallStatistics,
+      lastThreeStatistics,
+    });
   } catch (error) {
     console.error('Error fetching user statistics:', error);
-    throw error;
+    return res.status(500).json({ error: 'Failed to fetch statistics' });
   }
 };
+
 
